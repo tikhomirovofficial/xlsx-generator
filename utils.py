@@ -2,11 +2,12 @@ from dateutil import parser
 import datetime as dt
 
 
-def try_parse_int(param_str):
+def try_parse_int(param_str) -> bool or int:
     try:
         return int(param_str)
     except BaseException:
         return False
+
 
 
 def get_excel_date(date_str):
@@ -19,6 +20,7 @@ def get_excel_date(date_str):
         if len(date_str) == 10:
             dt_timestamp = dt.datetime.fromtimestamp(int(date_str))
             return dt_timestamp.strftime(excel_format)
+
     except BaseException as e:
         return False
 
