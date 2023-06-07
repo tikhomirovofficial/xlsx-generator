@@ -1,5 +1,10 @@
+import datetime
+
 from dateutil import parser
 import datetime as dt
+import pandas as pd
+
+from pandas import DataFrame
 
 
 def try_parse_int(param_str) -> bool or int:
@@ -9,17 +14,40 @@ def try_parse_int(param_str) -> bool or int:
         return False
 
 
+def correct_dataframe(df: DataFrame) -> DataFrame:
+    list_from_df = []
+
+    # Уход от вложенности, установка корректных дат
+    for _, row in df.iterrows():
+        flatted_row_dict = dict_flat(dict(row))
+        for key, val in flatted_row_dict.items():
+            if isinstance(val, list):
+                sep = ", "
+
+                flatted_row_dict[key] = sep.join([str(item) for item in val])
+
+        list_from_df.append(reformat_obj_dates_to_excel(flatted_row_dict))
+
+    return pd.DataFrame(list_from_df)
+
+
+def set_new_keys_df(df: DataFrame, new_keys=[]) -> DataFrame:
+    df_keys = df.columns.array
+    new_df = df.rename(columns=get_new_keys(df_keys, new_keys))
+    return new_df
+
 
 def get_excel_date(date_str):
     try:
-        excel_format = "%d.%m.%Y"
+        excel_format = "%Y-%m-%d"
 
         if not try_parse_int(date_str):
-            return parser.parse(date_str).strftime(excel_format)
-
+            # return parser.parse(date_str).strftime(excel_format)
+            return datetime.strptime(parser.parse(date_str), excel_format).date()
         if len(date_str) == 10:
             dt_timestamp = dt.datetime.fromtimestamp(int(date_str))
-            return dt_timestamp.strftime(excel_format)
+            # return dt_timestamp.strftime(excel_format)
+            return dt_timestamp.date()
 
     except BaseException as e:
         return False
