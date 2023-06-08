@@ -44,13 +44,13 @@ async def get_temp_file(filename: str = Query(...),
     try:
         def cleanup():
             os.remove(temp_file.name)
+
         json_parsed = json.loads(data)
         keys_parsed = json.loads(keys)
 
         data_is_correct = isinstance(json_parsed, dict) or isinstance(json_parsed, list)
 
         if not data_is_correct:
-            print(data_is_correct)
             return JSONResponse({"err": "data is incorrect"})
 
         with tempfile.NamedTemporaryFile(delete=False) as temp_file:
@@ -63,5 +63,4 @@ async def get_temp_file(filename: str = Query(...),
                                 filename=f"{filename}.xlsx")
 
     except BaseException as e:
-        print(e)
         return JSONResponse({"err": "request is incorrect"})

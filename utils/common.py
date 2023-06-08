@@ -13,8 +13,6 @@ def try_parse_int(param_str) -> bool or int:
 
 # Конвертация даты в удобный формат для excel
 def get_excel_date(date_str):
-    excel_format = "%Y-%m-%d"
-
     try:
         if not try_parse_int(date_str):
             res = dateutil.parser.parse(date_str).date()
