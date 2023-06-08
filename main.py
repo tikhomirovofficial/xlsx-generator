@@ -1,94 +1,67 @@
+import json
 import os
 import tempfile
+from io import BytesIO
 
-from dateutil import parser
-from fastapi import FastAPI
-from fastapi.responses import FileResponse
-from starlette.background import BackgroundTask
 import pandas as pd
-from utils import *
+from fastapi import FastAPI, Query, Body
+from fastapi.responses import FileResponse, JSONResponse
+from openpyxl import Workbook
+
+from starlette.background import BackgroundTask
+
+from utils.dataframes import set_new_keys_df, correct_dataframe
+from utils.dictionaries import resize_excel_columns
 
 app = FastAPI()
 
 
-# **kwargs заменить на получаемые параметры
-def generate_file(params, custom_headers=[]):
-    is_dict = isinstance(params, dict)
-    prepared_data = [params] if is_dict else params
-    # flatted_data = [dict_flat(item if isinstance(item, dict) else dict(item)) for item in prepared_data ]
+# Основная функция генерации файла.
+# Принимает данные и кастомные заголовки, возвращает набор байтов для записи в excel файл.
+def generate_file(data, custom_headers=[]):
+    is_dict = isinstance(data, dict)
+    prepared_data = [data] if is_dict else data
 
-    # print(flatted_data)
-    # reformatted_dates = reformat_obj_dates_to_excel(flatted_data)
-
+    # Коррекция датафрейма, установка кастомных заголовков
     df = pd.DataFrame(prepared_data)
-    list_from_df = []
-    for index, val in df.iterrows():
-        list_from_df.append(reformat_obj_dates_to_excel(dict_flat(dict(val))))
+    correct_df = set_new_keys_df(correct_dataframe(df), custom_headers)
 
-    new_df = pd.DataFrame(list_from_df)
-    df_keys = new_df.columns.array
-    new_df = new_df.rename(columns=get_new_keys(df_keys, custom_headers))
+    workbook = Workbook()
+    workbook.active = resize_excel_columns(correct_df, workbook.active)
 
-    for index, val in new_df.iterrows():
-        for key, item in val.items():
-            print(key, item)
+    output = BytesIO()
+    workbook.save(output)
+    output.seek(0)
 
-    # print(get_excel_date("20/02/2004"))
-
-    # result = "output.xlsx"
-    # df.to_excel(result, index=False)
-    # return b'123'
+    return output.read()
 
 
-generate_file([
-    {
-        "name": "John Doe",
-        "age": 30,
-        "email": "johndoe@example.com",
-        "address": {
-            "street": "123 Main St",
-            "city": "New York",
-            "state": "NY",
-            "country": "USA"
-        },
-        "phoneNumbers": [
-            {
-                "type": "home",
-                "number": "555-1234"
-            },
-            {
-                "type": "work",
-                "number": "555-5678"
-            }
-        ],
-        "friends": [
-            {
-                "name": "Jane Smith",
-                "age": 28,
-                "birthday": "1659800000"
-            },
-            {
-                "name": "Mike Johnson",
-                "age": 32,
-                "birthday": "18/02/2002"
-            }
-        ]
-    }
+# Маршрут, принимает в качестве тела поля: имя файла, новые заголовки, данные (подразумевается JSON строка)
+@app.get("/")
+async def get_temp_file(filename: str = Query(...),
+                        keys: str = Query(...),
+                        data: str = Query(...)) -> FileResponse or JSONResponse:
+    try:
+        def cleanup():
+            os.remove(temp_file.name)
+        json_parsed = json.loads(data)
+        keys_parsed = json.loads(keys)
 
-])
-# в get_temp_file(сюда) можно передавать аргументы с их типами, что потребуется, то и передаем
-# @app.get("/")
-# async def get_temp_file() -> FileResponse:
-#     def cleanup():
-#         os.remove(temp_file.name)
-#
-#     # Создаем временный файл с помощью tempfile.NamedTemporaryFile
-#     with tempfile.NamedTemporaryFile(delete=False) as temp_file:
-#         # Записываем данные во временный файл
-#         # Все параметры, что потребуются для генерации файла передаем в функцию generate_file()
-#         temp_file.write(generate_file())
-#         temp_file.flush()
-#
-#         # Возвращаем временный файл в ответе
-#         return FileResponse(temp_file.name, background=BackgroundTask(cleanup), media_type="application/octet-stream",
-#                             filename="temp_file.txt")
+        data_is_correct = isinstance(json_parsed, dict) or isinstance(json_parsed, list)
+
+        if not data_is_correct:
+            print(data_is_correct)
+            return JSONResponse({"err": "data is incorrect"})
+
+        with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+            # Запись результата во временный файл
+            temp_file.write(generate_file(data=json_parsed, custom_headers=keys_parsed))
+            temp_file.flush()
+
+            return FileResponse(temp_file.name, background=BackgroundTask(cleanup),
+                                media_type="application/octet-stream",
+                                filename=f"{filename}.xlsx")
+
+    except BaseException as e:
+        print(e)
+        return JSONResponse({"err": "request is incorrect"})
